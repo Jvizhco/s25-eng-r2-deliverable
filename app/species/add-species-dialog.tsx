@@ -19,44 +19,14 @@ import { toast } from "@/components/ui/use-toast";
 import { createBrowserSupabaseClient } from "@/lib/client-utils";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { useState, type BaseSyntheticEvent } from "react";
+import { useEffect, useState, type BaseSyntheticEvent } from "react";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
+import { kingdoms, speciesSchema, type FormData } from "./schema-species-form";
 
 // We use zod (z) to define a schema for the "Add species" form.
 // zod handles validation of the input values with methods like .string(), .nullable(). It also processes the form inputs with .transform() before the inputs are sent to the database.
 
 // Define kingdom enum for use in Zod schema and displaying dropdown options in the form
-const kingdoms = z.enum(["Animalia", "Plantae", "Fungi", "Protista", "Archaea", "Bacteria"]);
-
-// Use Zod to define the shape + requirements of a Species entry; used in form validation
-const speciesSchema = z.object({
-  scientific_name: z
-    .string()
-    .trim()
-    .min(1)
-    .transform((val) => val?.trim()),
-  common_name: z
-    .string()
-    .nullable()
-    // Transform empty string or only whitespace input to null before form submission, and trim whitespace otherwise
-    .transform((val) => (!val || val.trim() === "" ? null : val.trim())),
-  kingdom: kingdoms,
-  total_population: z.number().int().positive().min(1).nullable(),
-  image: z
-    .string()
-    .url()
-    .nullable()
-    // Transform empty string or only whitespace input to null before form submission, and trim whitespace otherwise
-    .transform((val) => (!val || val.trim() === "" ? null : val.trim())),
-  description: z
-    .string()
-    .nullable()
-    // Transform empty string or only whitespace input to null before form submission, and trim whitespace otherwise
-    .transform((val) => (!val || val.trim() === "" ? null : val.trim())),
-});
-
-type FormData = z.infer<typeof speciesSchema>;
 
 // Default values for the form fields.
 /* Because the react-hook-form (RHF) used here is a controlled form (not an uncontrolled form),
@@ -74,11 +44,22 @@ const defaultValues: Partial<FormData> = {
   description: null,
 };
 
+//type interface for the json data from the api call
+interface WikipediaResponse {
+  type?: string;
+  extract?: string;
+  thumbnail?: { source: string };
+}
+
 export default function AddSpeciesDialog({ userId }: { userId: string }) {
   const router = useRouter();
 
   // Control open/closed state of the dialog
   const [open, setOpen] = useState<boolean>(false);
+
+  const [loading, setLoading] = useState<boolean>(false); //states to see if the api is called
+
+  const [searchInput, setSearchInput] = useState<string>(""); // search field state and input
 
   // Instantiate form functionality with React Hook Form, passing in the Zod schema (for validation) and default values
   const form = useForm<FormData>({
@@ -86,6 +67,59 @@ export default function AddSpeciesDialog({ userId }: { userId: string }) {
     defaultValues,
     mode: "onChange",
   });
+
+  useEffect(() => {
+    if (!open) {
+      form.reset(defaultValues);
+      setSearchInput("");//sets the search box empty when reopening
+    }
+  }, [open, form]); //when open or form is changes, we reset the form to defaultValues
+
+
+  const searchWikipedia = async () => {
+    if (!searchInput.trim()) { //error catch
+      toast({
+        title: "Search error",
+        description: "Please enter a species name to search.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true); // api is being called
+    try {
+      const response = await fetch(
+        `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(searchInput)}`,
+      ); //api link
+
+      if (!response.ok) throw new Error("Failed to fetch");//check for response
+
+      const data = (await response.json()) as WikipediaResponse;
+
+      if (data.type === "standard") {
+        form.setValue("description", data.extract ?? null); //gets description if it exist
+        form.setValue("image", data.thumbnail?.source ?? null); //gets image url if it exist
+
+        toast({
+          title: "Autofill Success",
+          description: `Details found for "${searchInput}".`,
+        });
+      } else {
+        toast({
+          title: "No Results Found",
+          description: `No Wikipedia article found for "${searchInput}".`,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch data from Wikipedia.",
+        variant: "destructive",
+      });
+    }
+    setLoading(false);// api call is done
+  };
 
   const onSubmit = async (input: FormData) => {
     // The `input` prop contains data that has already been processed by zod. We can now use it in a supabase query
@@ -147,6 +181,18 @@ export default function AddSpeciesDialog({ userId }: { userId: string }) {
         <Form {...form}>
           <form onSubmit={(e: BaseSyntheticEvent) => void form.handleSubmit(onSubmit)(e)}>
             <div className="grid w-full items-center gap-4">
+              <div className="flex gap-2">
+                <FormLabel>Wikipedia Autofill</FormLabel>
+                <Input
+                  placeholder="Enter species name..."
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                />
+                <Button type="button" onClick={() => void searchWikipedia()} disabled={loading}>
+                  {loading ? "Searching..." : "Search"}
+                </Button>
+              </div>
+              <DialogDescription>Autofill Description and Image URl for your species</DialogDescription>
               <FormField
                 control={form.control}
                 name="scientific_name"

@@ -1,20 +1,45 @@
 "use client";
-import type { Database } from "@/lib/schema";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
-type Species = Database["public"]["Tables"]["species"]["Row"];
-
-import {useState} from "react";
+import { type Species} from "./schema-species-form";
+import {useState, useEffect} from "react";
+import { createBrowserSupabaseClient } from "@/lib/client-utils";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogClose,
 } from "@/components/ui/dialog";
+
+const supabase = createBrowserSupabaseClient();
+
 
 export default function LearnMore({species}: { species: Species }){
   const [open, setOpen] = useState<boolean>(false);
+
+  const [authorName, setAuthorName] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchAuthor() {
+      if (!species.author) return; // Skip if no author ID
+
+      const { data,  error } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("id", species.author)
+        .single();
+
+      if (error) {
+        console.error("Error fetching author:", error);
+      } else {
+        setAuthorName(data?.display_name || "Unknown Author");
+      }
+    }
+
+    fetchAuthor().catch(console.error);
+  }, [species.author]);// Run when species.author changes
 
 
   return(
@@ -27,7 +52,7 @@ export default function LearnMore({species}: { species: Species }){
           <DialogTitle>
             {species.scientific_name}:
             <span className= "text-lg font-light italic">
-              {species.common_name}
+              {species.common_name ? (" " + species.common_name) : (" Common Name Not Found")}
             </span>
           </DialogTitle>
         </DialogHeader>
@@ -37,17 +62,29 @@ export default function LearnMore({species}: { species: Species }){
           </div>
         )}
         <p>
-          <span className= "text-base font-medium leading-none font-semibol tracking-tight">Total Popultation:</span> {species.total_population ? (
-            <span>{species.total_population}</span>) : (<span> N/A</span>)}
+          <span className= "text-base font-medium leading-none font-semibol tracking-tight">
+            Total Popultation:</span> {species.total_population ? (
+            species.total_population) : (<span className= "text-base font-light italic"> Total Population Not Found</span>)}
         </p>
         <p>
           <span className= "text-base font-medium leading-none font-semibol mt-3">Kingdom:</span> {species.kingdom}
         </p>
         <p>
           <span className= "text-base font-medium leading-none font-semibol mt-3">
-            Description:
-          </span> {species.description}
+            Description:</span> {species.description ? (
+              species.description) : (<span className= "text-base font-light italic"> Description Not Found</span>)}
         </p>
+        <p>
+          <span className="text-base font-medium leading-none  tracking-tight">
+            Author:
+          </span>{" "}
+          {authorName ? authorName : <span className="text-base font-light italic">Loading...</span>}
+        </p>
+        <DialogClose asChild>
+                  <Button type="button" className="ml-1 mr-1 flex-auto" variant="secondary">
+                    Close
+                  </Button>
+        </DialogClose>
       </DialogContent>
     </Dialog>
   );

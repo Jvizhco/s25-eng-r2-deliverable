@@ -14,9 +14,11 @@ can cause errors with matching props and state in child components if the list o
 import type { Database } from "@/lib/schema";
 import Image from "next/image";
 import LearnMore from "./learn-more-info";
+import EditSpecies from "./edit-species";
+import DeleteSpecies from "./delete-species";
 type Species = Database["public"]["Tables"]["species"]["Row"];
 
-export default function SpeciesCard({ species }: { species: Species }) {
+export default function SpeciesCard({ species, userId }: { species: Species; userId: string }) {
   return (
     <div className="m-4 w-72 min-w-72 flex-none rounded border-2 p-3 shadow">
       {species.image && (
@@ -27,8 +29,14 @@ export default function SpeciesCard({ species }: { species: Species }) {
       <h3 className="mt-3 text-2xl font-semibold">{species.scientific_name}</h3>
       <h4 className="text-lg font-light italic">{species.common_name}</h4>
       <p>{species.description ? species.description.slice(0, 150).trim() + "..." : ""}</p>
-      {/* Replace the button with the detailed view dialog. */}
+      {/* These are the LearnMore and EditSpecies that I added . */}
+      <div className="flex justify-between">
       <LearnMore species={species}/>
+      <EditSpecies species={species} userId={userId}/>
+      </div>
+      <div className="flex justify-center mt-2">
+      <DeleteSpecies species={species} userId={userId} />
+      </div>
     </div>
   );
 }
